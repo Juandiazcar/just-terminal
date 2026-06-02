@@ -1,0 +1,56 @@
+@import "@xterm/xterm/css/xterm.css";
+@import "./themes/dark.css";
+@import "./themes/light.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  #root {
+    /* Scale the whole app. calc shrinks the root so scale brings it back to 100vw×100vh.
+       This makes all child h-full/w-full units respond to the scaled size. */
+    width: calc(100vw / var(--app-zoom, 1));
+    height: calc(100vh / var(--app-zoom, 1));
+    transform: scale(var(--app-zoom, 1));
+    transform-origin: top left;
+    overflow: hidden;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Warp-style kbd */
+  kbd {
+    font-family: inherit;
+    border: 1px solid hsl(var(--border));
+  }
+}
+
+/* xterm */
+.xterm { height: 100%; padding: 8px; }
+.xterm-viewport { overflow-y: auto !important; }
+
+/* Warp-style thin scrollbars */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
+
+/* Smooth selection */
+::selection { background: hsl(var(--primary) / 0.3); }

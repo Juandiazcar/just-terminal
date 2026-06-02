@@ -1,0 +1,31 @@
+body.dark {
+  /* Warp-inspired palette */
+  --background: 240 15% 6%;
+  --foreground: 220 15% 86%;
+  --card: 240 14% 9%;
+  --card-foreground: 220 15% 86%;
+  --popover: 240 16% 11%;
+  --popover-foreground: 220 15% 90%;
+  --primary: 262 80% 68%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 10% 14%;
+  --secondary-foreground: 220 12% 72%;
+  --muted: 240 10% 12%;
+  --muted-foreground: 220 8% 46%;
+  --accent: 262 80% 68%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 72% 55%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 10% 14%;
+  --input: 240 10% 14%;
+  --ring: 262 80% 68%;
+
+  --sidebar-bg: 240 16% 5%;
+  --terminal-bg: 240 15% 6%;
+  --tab-bar-bg: 240 16% 5%;
+  --tab-active-bg: 240 14% 9%;
+  --statusbar-bg: 240 16% 4%;
+
+  /* Gradient accent used in hover/active states */
+  --gradient-primary: linear-gradient(135deg, hsl(262 80% 68%), hsl(217 91% 60%));
+}
