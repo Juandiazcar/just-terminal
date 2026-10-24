@@ -9,6 +9,8 @@ import {
   resizePty,
   killTerminal,
   createTerminal,
+  ackPtyOutput,
+  setPtyAttached,
 } from "@/lib/tauri-bridge"
 import { extractCwdFromOsc7 } from "@/lib/osc-parser"
 import { hasPrimaryModifier } from "@/lib/platform"
@@ -17,6 +19,9 @@ import { useExplorerStore } from "@/store/explorer.store"
 import { useSessionStore } from "@/store/session.store"
 import { handleCommandError } from "@/lib/error-handler"
 import type { ShellProfile } from "@/types/terminal.types"
+
+// Acks are batched; the backend pauses the PTY after 32 unacked events, so this must stay well below
+const ACK_BATCH = 8
 
 export function useTerminal(
   terminalId: string,
@@ -35,11 +40,18 @@ export function useTerminal(
   const sessionPushRecent = useSessionStore((s) => s.pushRecentDir)
   const isDark = useSessionStore((s) => s.theme === "dark")
 
+  const resizeFrameRef = useRef<number | null>(null)
+
+  // At most one fit + IPC per frame, however many ResizeObserver callbacks fire while dragging
   const handleResize = useCallback(() => {
-    if (!fitRef.current || !termRef.current) return
-    fitRef.current.fit()
-    const { cols, rows } = termRef.current
-    resizePty(ptyIdRef.current, cols, rows).catch(() => {})
+    if (resizeFrameRef.current !== null) return
+    resizeFrameRef.current = requestAnimationFrame(() => {
+      resizeFrameRef.current = null
+      if (!fitRef.current || !termRef.current) return
+      fitRef.current.fit()
+      const { cols, rows } = termRef.current
+      resizePty(ptyIdRef.current, cols, rows).catch(() => {})
+    })
   }, [])
 
   useEffect(() => {
@@ -89,6 +101,7 @@ export function useTerminal(
     })
 
     const setupListeners = async () => {
+      let unacked = 0
       const unlistenOutput = await onPtyOutput(terminalId, (data) => {
         const cwd = extractCwdFromOsc7(data)
         // Every prompt emits OSC 7; only react when the directory actually changed
@@ -97,8 +110,14 @@ export function useTerminal(
           setCwd(cwd).catch(() => {})
           sessionPushRecent(cwd)
         }
-        term.write(data)
+        term.write(data, () => {
+          if (++unacked < ACK_BATCH) return
+          const count = unacked
+          unacked = 0
+          ackPtyOutput(ptyIdRef.current, count).catch(() => {})
+        })
       })
+      await setPtyAttached(ptyIdRef.current, true).catch(() => {})
 
       const unlistenClosed = await onTerminalClosed(terminalId, (code) => {
         term.write(
@@ -122,7 +141,10 @@ export function useTerminal(
 
     return () => {
       cancelAnimationFrame(rafId)
+      if (resizeFrameRef.current !== null) cancelAnimationFrame(resizeFrameRef.current)
+      resizeFrameRef.current = null
       observer.disconnect()
+      setPtyAttached(ptyIdRef.current, false).catch(() => {})
       unlistenRefs.current.forEach((fn) => fn())
       unlistenRefs.current = []
       term.dispose()

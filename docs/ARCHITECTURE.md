@@ -424,6 +424,10 @@ PowerShell executes the `-Command` silently before entering interactive mode —
 
 - PTY reader: 32 KB reusable buffer, UTF-8 sequences split across reads are carried over (no U+FFFD), 256 KB thread stack.
 - Process exit: the reader thread reaps the child, reports the real exit code and removes the session (no leaked FDs/zombies). `kill_terminal` kills the child explicitly.
+- Backpressure: the reader pauses after 32 unacked output events (`ack_pty_output`, sent by `useTerminal` every 8 rendered events). Only while a view is attached (`set_pty_attached`); a 3 s stall timeout disables it if the webview vanishes.
+- Locking: the manager mutex guards only the session map. Writes, resizes and cwd updates use per-session locks, so a stalled shell cannot block other terminals.
+- Blocking disk/git work runs through `blocking::run` (tokio blocking pool), never on async workers. File search skips `node_modules`, `target`, `dist`, `build`, `__pycache__`, `venv`.
+- Release profile uses `opt-level = 3`.
 - xterm: WebGL renderer (DOM fallback), scrollback 5000 lines (`DEFAULT_SCROLLBACK`).
 - The fs watcher is **non-recursive** (the explorer only lists one level) and the frontend debounces refreshes.
 - OSC 7 handling is skipped unless the chunk contains the OSC 7 prefix, and store updates only fire when the cwd changes.

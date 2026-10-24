@@ -1,6 +1,16 @@
+use std::sync::Arc;
+
 use tauri::{AppHandle, State};
 
+use super::session::PtySession;
 use crate::state::AppState;
+
+// The manager lock is held only for the map lookup; all I/O happens on the per-session locks,
+// so a stalled shell can never block other terminals.
+fn session_of(state: &State<'_, AppState>, id: &str) -> Result<Arc<PtySession>, String> {
+    let manager = state.pty_manager.lock().map_err(|e| e.to_string())?;
+    manager.get(id).map_err(|e| e.to_string())
+}
 
 #[tauri::command]
 pub async fn create_terminal(
@@ -25,12 +35,8 @@ pub async fn write_pty_input(
     data: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let mut manager = state
-        .pty_manager
-        .lock()
-        .map_err(|e| e.to_string())?;
-    manager
-        .write_input(&id, &data)
+    session_of(&state, &id)?
+        .write_input(&data)
         .map_err(|e| format!("Failed to write input to terminal {id}: {e}"))
 }
 
@@ -41,12 +47,8 @@ pub async fn resize_pty(
     rows: u16,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let mut manager = state
-        .pty_manager
-        .lock()
-        .map_err(|e| e.to_string())?;
-    manager
-        .resize(&id, cols, rows)
+    session_of(&state, &id)?
+        .resize(cols, rows)
         .map_err(|e| format!("Failed to resize terminal {id}: {e}"))
 }
 
@@ -67,11 +69,28 @@ pub async fn set_terminal_cwd(
     cwd: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let mut manager = state
-        .pty_manager
-        .lock()
-        .map_err(|e| e.to_string())?;
-    manager
-        .set_cwd(&id, cwd)
-        .map_err(|e| format!("Failed to set cwd for terminal {id}: {e}"))
+    session_of(&state, &id)?.set_cwd(cwd);
+    Ok(())
+}
+
+/// Frontend reports how many output events xterm has finished rendering.
+#[tauri::command]
+pub async fn ack_pty_output(
+    id: String,
+    count: usize,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    session_of(&state, &id)?.flow.ack(count);
+    Ok(())
+}
+
+/// A terminal view attaches on mount and detaches on unmount; only attached views apply backpressure.
+#[tauri::command]
+pub async fn set_pty_attached(
+    id: String,
+    attached: bool,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    session_of(&state, &id)?.flow.set_attached(attached);
+    Ok(())
 }

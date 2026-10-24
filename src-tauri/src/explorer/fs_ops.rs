@@ -53,11 +53,8 @@ pub fn list_dir(path: &str, show_hidden: bool) -> Result<Vec<DirEntry>> {
         });
     }
 
-    entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
-        (true, false) => std::cmp::Ordering::Less,
-        (false, true) => std::cmp::Ordering::Greater,
-        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-    });
+    // Lowercased key computed once per entry instead of twice per comparison
+    entries.sort_by_cached_key(|e| (!e.is_dir, e.name.to_lowercase()));
 
     Ok(entries)
 }
@@ -91,6 +88,9 @@ pub fn delete_entry(path: &str, recursive: bool) -> Result<()> {
     Ok(())
 }
 
+// Directories that are huge, machine-generated and never what the user is looking for.
+const SKIPPED_DIRS: [&str; 6] = ["node_modules", "target", "dist", "build", "__pycache__", "venv"];
+
 pub fn search_files(root: &str, query: &str, max_results: usize) -> Result<Vec<DirEntry>> {
     let mut results = Vec::new();
     search_recursive(
@@ -101,6 +101,15 @@ pub fn search_files(root: &str, query: &str, max_results: usize) -> Result<Vec<D
         0,
     );
     Ok(results)
+}
+
+// Case-insensitive substring test; ASCII names (the vast majority) never allocate.
+fn matches_query(name: &str, query_lower: &str) -> bool {
+    if name.is_ascii() && query_lower.is_ascii() {
+        let (n, q) = (name.as_bytes(), query_lower.as_bytes());
+        return q.is_empty() || n.windows(q.len()).any(|w| w.eq_ignore_ascii_case(q));
+    }
+    name.to_lowercase().contains(query_lower)
 }
 
 fn search_recursive(
@@ -125,26 +134,31 @@ fn search_recursive(
         if name.starts_with('.') {
             continue;
         }
-        let meta = match entry.metadata() {
-            Ok(m) => m,
+        // file_type() needs no extra stat call; full metadata is read only for matches
+        let is_dir = match entry.file_type() {
+            Ok(t) => t.is_dir(),
             Err(_) => continue,
         };
-        if name.to_lowercase().contains(query) {
+        if matches_query(&name, query) {
+            let meta = match entry.metadata() {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
             let modified_at = meta
                 .modified()
                 .ok()
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|d| d.as_secs());
             results.push(DirEntry {
-                name,
+                name: name.clone(),
                 path: entry.path().to_string_lossy().to_string(),
-                is_dir: meta.is_dir(),
+                is_dir,
                 is_hidden: false,
                 size: if meta.is_file() { Some(meta.len()) } else { None },
                 modified_at,
             });
         }
-        if meta.is_dir() {
+        if is_dir && !SKIPPED_DIRS.contains(&name.as_str()) {
             search_recursive(&entry.path(), query, results, max, depth + 1);
         }
     }
@@ -188,6 +202,23 @@ mod tests {
         assert!(path.exists());
         delete_entry(path.to_str().unwrap(), false).unwrap();
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn test_matches_query_is_case_insensitive() {
+        assert!(matches_query("README.md", "readme"));
+        assert!(matches_query("Ñandú.txt", "ñandú"));
+        assert!(!matches_query("main.rs", "lib"));
+    }
+
+    #[test]
+    fn test_search_skips_heavy_dirs() {
+        let dir = TempDir::new().unwrap();
+        create_dir(dir.path().join("node_modules").to_str().unwrap()).unwrap();
+        create_file(dir.path().join("node_modules").join("hit.txt").to_str().unwrap()).unwrap();
+        create_file(dir.path().join("hit.txt").to_str().unwrap()).unwrap();
+        let found = search_files(dir.path().to_str().unwrap(), "hit", 10).unwrap();
+        assert_eq!(found.len(), 1);
     }
 
     #[test]

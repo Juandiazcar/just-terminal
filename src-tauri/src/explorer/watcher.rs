@@ -18,6 +18,12 @@ pub struct FsWatcher {
     watchers: HashMap<String, RecommendedWatcher>,
 }
 
+impl Default for FsWatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FsWatcher {
     pub fn new() -> Self {
         Self {

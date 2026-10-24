@@ -1,6 +1,7 @@
 use tauri::{AppHandle, State};
 
 use super::fs_ops::{self, DirEntry};
+use crate::blocking;
 use crate::state::AppState;
 
 #[tauri::command]
@@ -10,42 +11,64 @@ pub async fn list_dir(
     state: State<'_, AppState>,
 ) -> Result<Vec<DirEntry>, String> {
     let _ = state;
-    fs_ops::list_dir(&path, show_hidden.unwrap_or(false))
-        .map_err(|e| format!("Failed to list directory '{path}': {e}"))
+    let show_hidden = show_hidden.unwrap_or(false);
+    blocking::run(move || {
+        fs_ops::list_dir(&path, show_hidden)
+            .map_err(|e| format!("Failed to list directory '{path}': {e}"))
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn create_file(path: String) -> Result<(), String> {
-    fs_ops::create_file(&path).map_err(|e| format!("Failed to create file '{path}': {e}"))
+    blocking::run(move || {
+        fs_ops::create_file(&path).map_err(|e| format!("Failed to create file '{path}': {e}"))
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn create_dir(path: String) -> Result<(), String> {
-    fs_ops::create_dir(&path).map_err(|e| format!("Failed to create directory '{path}': {e}"))
+    blocking::run(move || {
+        fs_ops::create_dir(&path)
+            .map_err(|e| format!("Failed to create directory '{path}': {e}"))
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn rename_entry(from: String, to: String) -> Result<(), String> {
-    fs_ops::rename_entry(&from, &to)
-        .map_err(|e| format!("Failed to rename '{from}' to '{to}': {e}"))
+    blocking::run(move || {
+        fs_ops::rename_entry(&from, &to)
+            .map_err(|e| format!("Failed to rename '{from}' to '{to}': {e}"))
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn delete_entry(path: String, recursive: bool) -> Result<(), String> {
-    fs_ops::delete_entry(&path, recursive)
-        .map_err(|e| format!("Failed to delete '{path}': {e}"))
+    blocking::run(move || {
+        fs_ops::delete_entry(&path, recursive)
+            .map_err(|e| format!("Failed to delete '{path}': {e}"))
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn copy_entry(from: String, to: String) -> Result<(), String> {
-    fs_ops::copy_entry(&from, &to)
-        .map_err(|e| format!("Failed to copy '{from}' to '{to}': {e}"))
+    blocking::run(move || {
+        fs_ops::copy_entry(&from, &to)
+            .map_err(|e| format!("Failed to copy '{from}' to '{to}': {e}"))
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn search_files(root: String, query: String) -> Result<Vec<DirEntry>, String> {
-    fs_ops::search_files(&root, &query, 60)
-        .map_err(|e| format!("Search failed: {e}"))
+    blocking::run(move || {
+        fs_ops::search_files(&root, &query, 60).map_err(|e| format!("Search failed: {e}"))
+    })
+    .await
 }
 
 #[tauri::command]

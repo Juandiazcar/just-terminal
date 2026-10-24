@@ -27,6 +27,13 @@ export const killTerminal = (id: string) => invoke<void>("kill_terminal", { id }
 export const setTerminalCwd = (id: string, cwd: string) =>
   invoke<void>("set_terminal_cwd", { id, cwd })
 
+// Backpressure: ack rendered output events; attach/detach scopes it to a mounted terminal view
+export const ackPtyOutput = (id: string, count: number) =>
+  invoke<void>("ack_pty_output", { id, count })
+
+export const setPtyAttached = (id: string, attached: boolean) =>
+  invoke<void>("set_pty_attached", { id, attached })
+
 export const onPtyOutput = (
   id: string,
   cb: (data: string) => void

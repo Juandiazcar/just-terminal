@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::sync::{Arc, Mutex};
+use std::io::Read;
+use std::sync::Arc;
 
 use anyhow::Result;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
@@ -17,7 +17,13 @@ const READ_BUF_SIZE: usize = 32 * 1024;
 const READER_STACK_SIZE: usize = 256 * 1024;
 
 pub struct PtyManager {
-    sessions: HashMap<String, PtySession>,
+    sessions: HashMap<String, Arc<PtySession>>,
+}
+
+impl Default for PtyManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PtyManager {
@@ -66,20 +72,22 @@ impl PtyManager {
         let mut reader = pair.master.try_clone_reader()?;
         let writer = pair.master.take_writer()?;
 
-        // Registered before the reader starts so an instantly-dying shell is still cleaned up.
-        self.sessions.insert(
+        let session = Arc::new(PtySession::new(
             id.clone(),
-            PtySession {
-                id: id.clone(),
-                cwd: Arc::new(Mutex::new(cwd)),
-                master: pair.master,
-                writer,
-                killer: child.clone_killer(),
-            },
-        );
+            cwd,
+            pair.master,
+            writer,
+            child.clone_killer(),
+        ));
+        // The reader holds only the flow handle, never the session: dropping the session
+        // (kill) must release the master so the reader sees EOF.
+        let flow = session.flow.clone();
+        // Registered before the reader starts so an instantly-dying shell is still cleaned up.
+        self.sessions.insert(id.clone(), session);
 
         let id_clone = id.clone();
         let app_clone = app.clone();
+        let event_name = format!("pty_output_{id}");
 
         let spawned = std::thread::Builder::new()
             .name(format!("pty-reader-{id}"))
@@ -94,7 +102,9 @@ impl PtyManager {
                             filled += n;
                             let (output, consumed) = decode_chunk(&buf[..filled]);
                             if !output.is_empty() {
-                                let _ = app_clone.emit(&format!("pty_output_{}", id_clone), output);
+                                flow.wait_for_capacity();
+                                let _ = app_clone.emit(&event_name, output);
+                                flow.record_emit();
                             }
                             // Keep a trailing partial UTF-8 sequence for the next read.
                             buf.copy_within(consumed..filled, 0);
@@ -124,51 +134,18 @@ impl PtyManager {
         Ok(id)
     }
 
-    pub fn write_input(&mut self, id: &str, data: &str) -> Result<()> {
-        let session = self
-            .sessions
-            .get_mut(id)
-            .ok_or_else(|| anyhow::anyhow!("Terminal not found: {}", id))?;
-        session.writer.write_all(data.as_bytes())?;
-        Ok(())
-    }
-
-    pub fn resize(&mut self, id: &str, cols: u16, rows: u16) -> Result<()> {
-        let session = self
-            .sessions
-            .get_mut(id)
-            .ok_or_else(|| anyhow::anyhow!("Terminal not found: {}", id))?;
-        session.master.resize(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })?;
-        Ok(())
+    pub fn get(&self, id: &str) -> Result<Arc<PtySession>> {
+        self.sessions
+            .get(id)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("Terminal not found: {}", id))
     }
 
     pub fn kill(&mut self, id: &str) -> Result<()> {
-        if let Some(mut session) = self.sessions.remove(id) {
-            // Already-exited processes make kill() fail; that is not an error here.
-            let _ = session.killer.kill();
+        if let Some(session) = self.sessions.remove(id) {
+            session.kill();
         }
         Ok(())
-    }
-
-    pub fn set_cwd(&mut self, id: &str, cwd: String) -> Result<()> {
-        let session = self
-            .sessions
-            .get_mut(id)
-            .ok_or_else(|| anyhow::anyhow!("Terminal not found: {}", id))?;
-        let mut lock = session.cwd.lock().map_err(|e| anyhow::anyhow!("{e}"))?;
-        *lock = cwd;
-        Ok(())
-    }
-
-    pub fn get_cwd(&self, id: &str) -> Option<String> {
-        let session = self.sessions.get(id)?;
-        let lock = session.cwd.lock().ok()?;
-        Some(lock.clone())
     }
 }
 

@@ -1,3 +1,4 @@
+pub mod blocking;
 pub mod explorer;
 pub mod git;
 pub mod platform;
@@ -39,6 +40,8 @@ pub fn run() {
             terminal::commands::resize_pty,
             terminal::commands::kill_terminal,
             terminal::commands::set_terminal_cwd,
+            terminal::commands::ack_pty_output,
+            terminal::commands::set_pty_attached,
             platform::commands::get_platform_info,
             explorer::commands::search_files,
             explorer::commands::list_dir,
