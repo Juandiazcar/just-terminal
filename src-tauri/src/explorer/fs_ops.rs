@@ -27,7 +27,12 @@ pub fn list_dir(path: &str, show_hidden: bool) -> Result<Vec<DirEntry>> {
             continue;
         }
 
-        let metadata = entry.metadata()?;
+        // DirEntry::metadata() does not follow symlinks on Unix; resolve them so linked dirs stay dirs.
+        let metadata = match entry.metadata() {
+            Ok(m) if m.file_type().is_symlink() => fs::metadata(entry.path()).unwrap_or(m),
+            Ok(m) => m,
+            Err(e) => return Err(e.into()),
+        };
         let modified_at = metadata
             .modified()
             .ok()

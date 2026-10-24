@@ -5,6 +5,7 @@ import { useSessionStore } from "@/store/session.store"
 import { createTerminal } from "@/lib/tauri-bridge"
 import { getDefaultShell } from "@/lib/shell-profiles"
 import { handleCommandError } from "@/lib/error-handler"
+import { getDefaultCwd, splitPath } from "@/lib/platform"
 import { SettingsPanel } from "@/components/settings/SettingsPanel"
 import { cn } from "@/lib/utils"
 
@@ -31,8 +32,9 @@ export function TerminalTabBar() {
 
   const openNewTab = () => {
     const shell = getDefaultShell()
-    createTerminal(shell.executable, shell.args ?? [], "C:\\")
-      .then((id) => addSession(makeSession(id, shell, "C:\\")))
+    const cwd = getDefaultCwd()
+    createTerminal(shell.executable, shell.args ?? [], cwd)
+      .then((id) => addSession(makeSession(id, shell, cwd)))
       .catch((e) => handleCommandError("TabBar.newTab", e))
   }
 
@@ -107,7 +109,7 @@ export function TerminalTabBar() {
           const isRenaming = renamingId === id
           const isDragging = dragId === id
           const isDropTarget = dropTargetId === id && dragId !== id
-          const folder = session.cwd?.split(/[/\\]/).filter(Boolean).pop() ?? "~"
+          const folder = (session.cwd ? splitPath(session.cwd).pop() : undefined) ?? "~"
 
           return (
             <div key={id}>

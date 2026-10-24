@@ -4,6 +4,7 @@ import { useExplorerStore } from "@/store/explorer.store"
 import { useExplorerUIStore } from "@/store/explorer-ui.store"
 import { createFile, createDir } from "@/lib/tauri-bridge"
 import { handleCommandError } from "@/lib/error-handler"
+import { joinPath, splitPath } from "@/lib/platform"
 import { cn } from "@/lib/utils"
 
 export function FileTreeToolbar() {
@@ -13,7 +14,7 @@ export function FileTreeToolbar() {
 
   const handleCommit = async (value: string) => {
     if (!value.trim() || !cwd) { reset(); return }
-    const path = `${cwd}\\${value.trim()}`
+    const path = joinPath(cwd, value.trim())
     if (mode === "new-file") {
       await createFile(path).catch((e) => handleCommandError("FileTree.newFile", e))
     } else if (mode === "new-folder") {
@@ -33,7 +34,7 @@ export function FileTreeToolbar() {
     if (m !== "idle") setTimeout(() => inputRef.current?.focus(), 0)
   }
 
-  const dirName = cwd?.split(/[/\\]/).filter(Boolean).pop() ?? "Explorer"
+  const dirName = (cwd ? splitPath(cwd).pop() : undefined) ?? "Explorer"
 
   return (
     <div className="flex-shrink-0" style={{ borderBottom: "1px solid hsl(var(--border))" }}>

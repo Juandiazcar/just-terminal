@@ -7,7 +7,9 @@ import { useNotificationStore } from "@/store/notification.store"
 import { useKeyBindings } from "@/hooks/useKeyBindings"
 import { useActiveTerminalSync } from "@/hooks/useActiveTerminalSync"
 import { useApplySettings } from "@/components/settings/SettingsPanel"
-import { loadSession, saveSession, createTerminal } from "@/lib/tauri-bridge"
+import { usePlatformStore } from "@/store/platform.store"
+import { getPlatformInfo, loadSession, saveSession, createTerminal } from "@/lib/tauri-bridge"
+import { getDefaultCwd, getPlatform } from "@/lib/platform"
 import { getDefaultShell } from "@/lib/shell-profiles"
 import { handleCommandError } from "@/lib/error-handler"
 import type { SessionSnapshot } from "@/types/session.types"
@@ -60,7 +62,11 @@ export default function App() {
   useEffect(() => {
     if (sessionInitialized.current) return
     sessionInitialized.current = true
-    loadSession()
+    // Platform info must be known before any shell / cwd decision is made
+    getPlatformInfo()
+      .then((info) => usePlatformStore.getState().setInfo(info))
+      .catch((e) => handleCommandError("Platform.init", e))
+      .then(() => loadSession())
       .then((snapshot: SessionSnapshot | null) => {
         if (!snapshot) {
           openInitialTerminal()
@@ -81,7 +87,10 @@ export default function App() {
           const defaultShell = getDefaultShell()
           snapshot.tabs.forEach((tab) => {
             // Fall back to default shell if saved executable has no path separator (e.g. bare "pwsh.exe")
-            const shell = tab.shell.executable.includes("\\") ? tab.shell : defaultShell
+            // or was saved on another OS
+            const shell = tab.shell.executable.includes(getPlatform().pathSeparator)
+              ? tab.shell
+              : defaultShell
             createTerminal(shell.executable, shell.args ?? [], tab.cwd)
               .then((id) => addSession(makeSession(id, shell, tab.cwd)))
               .catch((e) => handleCommandError("Session.restore", e))
@@ -98,7 +107,7 @@ export default function App() {
 
   const openInitialTerminal = () => {
     const shell = getDefaultShell()
-    const cwd = "C:\\"
+    const cwd = getDefaultCwd()
     createTerminal(shell.executable, shell.args ?? [], cwd)
       .then((id) => {
         addSession(makeSession(id, shell, cwd))

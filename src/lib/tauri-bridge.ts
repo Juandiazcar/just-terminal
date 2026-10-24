@@ -2,9 +2,14 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
 import type { DirEntry, FsChangeEvent } from "@/types/explorer.types"
 import type { CommitInfo, GitStatus } from "@/types/git.types"
+import type { PlatformInfo } from "@/types/platform.types"
 import type { SessionSnapshot } from "@/types/session.types"
 
 export type UnlistenFn = () => void
+
+// ── Platform ──────────────────────────────────────────────────────────────────
+
+export const getPlatformInfo = () => invoke<PlatformInfo>("get_platform_info", {})
 
 // ── Terminal ──────────────────────────────────────────────────────────────────
 

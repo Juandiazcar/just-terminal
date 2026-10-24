@@ -164,8 +164,12 @@ src-tauri/src/
 ├── state.rs         → AppState struct
 ├── terminal/
 │   ├── pty_manager.rs   → spawn(shell, args, cwd, app), write, resize, kill
-│   ├── session.rs       → PtySession struct
+│   ├── session.rs       → PtySession struct (master, writer, child killer)
+│   ├── shell_integration.rs → OSC 7 injection for bash/zsh/fish (macOS/Linux)
 │   └── commands.rs      → create_terminal(shell, args, cwd, ...) etc.
+├── platform/
+│   ├── info.rs          → PlatformInfo: os, home dir, path separator, installed shells
+│   └── commands.rs      → get_platform_info (called once at startup, stored in platform.store)
 ├── explorer/
 │   ├── fs_ops.rs        → list_dir, create_file, delete_entry, search_files (recursive)
 │   ├── watcher.rs       → FsWatcher with notify, emits "fs_change"
@@ -407,6 +411,22 @@ export const SHELL_PROFILES = [
 ```
 
 PowerShell executes the `-Command` silently before entering interactive mode — no echo, no `>>` continuation prompts.
+
+### 8.2.1 Cross-platform (Windows / macOS / Linux)
+
+- **Platform facts come from Rust.** `get_platform_info` runs before session restore in `App.tsx`; `lib/platform.ts` exposes sync helpers (`getDefaultCwd`, `joinPath`, `splitPath`, `cdCommand`, `hasPrimaryModifier`). Never hardcode `C:\\`, `\\` or `e.ctrlKey` in components.
+- **Shell profiles:** Windows uses the static list in `shell-profiles.ts`; macOS/Linux build profiles from `/etc/shells` and default to `$SHELL`.
+- **OSC 7 on POSIX** is injected by the backend (`shell_integration.rs`): `PROMPT_COMMAND` for bash, a `ZDOTDIR` shim for zsh (user config is still sourced), `--init-command` for fish. PowerShell keeps the `-Command` arg approach on every OS.
+- **Shortcuts:** the "primary" modifier is Cmd on macOS, Ctrl elsewhere. Tab switching uses literal Ctrl.
+- **Linux build deps:** `webkit2gtk-4.1`, `libssl-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `perl`.
+
+### 8.2.2 Performance & memory rules
+
+- PTY reader: 32 KB reusable buffer, UTF-8 sequences split across reads are carried over (no U+FFFD), 256 KB thread stack.
+- Process exit: the reader thread reaps the child, reports the real exit code and removes the session (no leaked FDs/zombies). `kill_terminal` kills the child explicitly.
+- xterm: WebGL renderer (DOM fallback), scrollback 5000 lines (`DEFAULT_SCROLLBACK`).
+- The fs watcher is **non-recursive** (the explorer only lists one level) and the frontend debounces refreshes.
+- OSC 7 handling is skipped unless the chunk contains the OSC 7 prefix, and store updates only fire when the cwd changes.
 
 ### 8.3 Resize Handling
 

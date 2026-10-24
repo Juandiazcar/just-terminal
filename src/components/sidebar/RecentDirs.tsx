@@ -2,6 +2,7 @@ import { useSessionStore } from "@/store/session.store"
 import { useExplorerStore } from "@/store/explorer.store"
 import { useTerminalsStore } from "@/store/terminals.store"
 import { writeInput } from "@/lib/tauri-bridge"
+import { cdCommand, splitPath } from "@/lib/platform"
 
 function FolderIcon() {
   return (
@@ -19,7 +20,7 @@ export function RecentDirs() {
 
   const navigate = (path: string) => {
     setCwd(path).catch(() => {})
-    if (activeId) writeInput(activeId, `cd "${path}"\r`).catch(() => {})
+    if (activeId) writeInput(activeId, cdCommand(path)).catch(() => {})
   }
 
   return (
@@ -40,7 +41,7 @@ export function RecentDirs() {
           </p>
         ) : (
           recentDirs.map((path) => {
-            const parts = path.split(/[/\\]/).filter(Boolean)
+            const parts = splitPath(path)
             const name = parts.at(-1) ?? path
             const parent = parts.at(-2)
             return (

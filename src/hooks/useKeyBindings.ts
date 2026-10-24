@@ -7,9 +7,13 @@ import { createTerminal } from "@/lib/tauri-bridge"
 import { makeSession } from "@/store/terminals.store"
 import { getDefaultShell } from "@/lib/shell-profiles"
 import { handleCommandError } from "@/lib/error-handler"
+import { getDefaultCwd, hasPrimaryModifier } from "@/lib/platform"
 
 interface Binding {
+  // Primary modifier: Cmd on macOS, Ctrl elsewhere (so Ctrl+W etc. still reach the shell on macOS)
   ctrl?: boolean
+  // Tab switching stays on the literal Ctrl key everywhere (Cmd+Tab belongs to the macOS app switcher)
+  literalCtrl?: boolean
   shift?: boolean
   alt?: boolean
   key: string
@@ -33,8 +37,9 @@ export function useKeyBindings() {
         key: "t",
         action: () => {
           const shell = getDefaultShell()
-          createTerminal(shell.executable, shell.args ?? [], "C:\\")
-            .then((id) => addSession(makeSession(id, shell, "C:\\")))
+          const cwd = getDefaultCwd()
+          createTerminal(shell.executable, shell.args ?? [], cwd)
+            .then((id) => addSession(makeSession(id, shell, cwd)))
             .catch((e) => handleCommandError("KeyBinding.newTab", e))
         },
       },
@@ -46,7 +51,7 @@ export function useKeyBindings() {
         },
       },
       {
-        ctrl: true,
+        literalCtrl: true,
         key: "Tab",
         action: () => {
           if (ids.length === 0) return
@@ -55,7 +60,7 @@ export function useKeyBindings() {
         },
       },
       {
-        ctrl: true,
+        literalCtrl: true,
         shift: true,
         key: "Tab",
         action: () => {
@@ -93,11 +98,12 @@ export function useKeyBindings() {
 
     const handler = (e: KeyboardEvent) => {
       for (const binding of bindings) {
-        const ctrlOk = binding.ctrl ? e.ctrlKey : !e.ctrlKey || !binding.ctrl
+        const wantsModifier = !!(binding.ctrl || binding.literalCtrl)
+        const modifierDown = binding.literalCtrl ? e.ctrlKey : hasPrimaryModifier(e)
         const shiftOk = binding.shift ? e.shiftKey : !binding.shift || true
         const keyOk = e.key === binding.key || e.key === binding.key.toLowerCase()
 
-        if (ctrlOk && shiftOk && keyOk && e.ctrlKey === !!binding.ctrl) {
+        if (shiftOk && keyOk && modifierDown === wantsModifier) {
           if (binding.shift !== undefined && e.shiftKey !== binding.shift) continue
           e.preventDefault()
           binding.action()

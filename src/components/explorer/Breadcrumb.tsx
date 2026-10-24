@@ -3,6 +3,7 @@ import { useExplorerStore } from "@/store/explorer.store"
 import { useTerminalsStore } from "@/store/terminals.store"
 import { writeInput } from "@/lib/tauri-bridge"
 import { handleCommandError } from "@/lib/error-handler"
+import { cdCommand, pathFromParts, splitPath } from "@/lib/platform"
 
 export function Breadcrumb() {
   const cwd = useExplorerStore((s) => s.cwd)
@@ -10,15 +11,11 @@ export function Breadcrumb() {
 
   if (!cwd) return null
 
-  const parts = cwd.split(/[/\\]/).filter(Boolean)
+  const parts = splitPath(cwd)
 
   const navigateTo = (index: number) => {
     if (!activeId) return
-    const sliced = parts.slice(0, index + 1)
-    const path = sliced.length === 1 && sliced[0].endsWith(":")
-      ? sliced[0] + "\\"
-      : sliced.join("\\")
-    writeInput(activeId, `cd "${path}"\r`).catch((e) =>
+    writeInput(activeId, cdCommand(pathFromParts(parts, index + 1))).catch((e) =>
       handleCommandError("Breadcrumb", e)
     )
   }

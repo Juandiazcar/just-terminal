@@ -2,6 +2,8 @@ import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { SearchAddon } from "@xterm/addon-search"
+import { WebglAddon } from "@xterm/addon-webgl"
+import { isWindows } from "@/lib/platform"
 
 export type XtermBundle = {
   term: Terminal
@@ -63,18 +65,23 @@ export function getXtermTheme(isDark: boolean) {
   return isDark ? getDarkTheme() : getLightTheme()
 }
 
-export function createXterm(isDark: boolean, fontSize = 14, scrollback = 10000): XtermBundle {
+// ~12 bytes per cell: every 1000 lines of scrollback cost roughly 2.5 MB per terminal at 200 columns
+export const DEFAULT_SCROLLBACK = 5000
+
+export function createXterm(
+  isDark: boolean,
+  fontSize = 14,
+  scrollback = DEFAULT_SCROLLBACK
+): XtermBundle {
   const term = new Terminal({
     cursorBlink: true,
-    fontFamily: "Cascadia Code, Consolas, monospace",
+    fontFamily: "Cascadia Code, Consolas, Menlo, DejaVu Sans Mono, monospace",
     fontSize,
     theme: getXtermTheme(isDark),
     allowTransparency: false,
     scrollback,
-    windowsPty: {
-      backend: "conpty",
-      buildNumber: 22000,
-    },
+    // Reflow heuristics for ConPTY only apply on Windows
+    ...(isWindows() ? { windowsPty: { backend: "conpty" as const, buildNumber: 22000 } } : {}),
   })
 
   const fitAddon = new FitAddon()
@@ -86,4 +93,16 @@ export function createXterm(isDark: boolean, fontSize = 14, scrollback = 10000):
   term.loadAddon(searchAddon)
 
   return { term, fitAddon, searchAddon }
+}
+
+// Must run after term.open(). GPU rendering is an order of magnitude faster than the DOM
+// renderer; if WebGL is unavailable or the context is lost, xterm falls back to the DOM renderer.
+export function enableGpuRenderer(term: Terminal): void {
+  try {
+    const webgl = new WebglAddon()
+    webgl.onContextLoss(() => webgl.dispose())
+    term.loadAddon(webgl)
+  } catch {
+    // keep DOM renderer
+  }
 }

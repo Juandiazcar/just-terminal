@@ -1,5 +1,6 @@
 pub mod explorer;
 pub mod git;
+pub mod platform;
 pub mod session;
 pub mod state;
 pub mod terminal;
@@ -38,6 +39,7 @@ pub fn run() {
             terminal::commands::resize_pty,
             terminal::commands::kill_terminal,
             terminal::commands::set_terminal_cwd,
+            platform::commands::get_platform_info,
             explorer::commands::search_files,
             explorer::commands::list_dir,
             explorer::commands::create_file,

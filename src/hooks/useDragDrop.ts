@@ -5,6 +5,7 @@ import { useExplorerStore } from "@/store/explorer.store"
 import { getDefaultShell } from "@/lib/shell-profiles"
 import { handleCommandError } from "@/lib/error-handler"
 import { dragState } from "@/lib/drag-state"
+import { cdCommand } from "@/lib/platform"
 import type { DirEntry } from "@/types/explorer.types"
 
 export function useDragDrop() {
@@ -29,7 +30,7 @@ export function useDragDrop() {
     const entry = dragState.get()
     dragState.end()
     if (!entry?.isDir) return
-    writeInput(ptyId, `cd "${entry.path}"\r`).catch((err) =>
+    writeInput(ptyId, cdCommand(entry.path)).catch((err) =>
       handleCommandError("DragDrop.cd", err)
     )
   }, [])

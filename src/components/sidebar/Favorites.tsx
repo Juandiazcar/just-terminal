@@ -4,6 +4,7 @@ import { useExplorerStore } from "@/store/explorer.store"
 import { useTerminalsStore } from "@/store/terminals.store"
 import { writeInput } from "@/lib/tauri-bridge"
 import { handleCommandError } from "@/lib/error-handler"
+import { cdCommand, splitPath } from "@/lib/platform"
 
 function FolderIcon() {
   return (
@@ -24,7 +25,7 @@ export function Favorites() {
   const navigate = (path: string) => {
     setCwd(path).catch(() => {})
     if (activeId) {
-      writeInput(activeId, `cd "${path}"\r`).catch((e) =>
+      writeInput(activeId, cdCommand(path)).catch((e) =>
         handleCommandError("Favorites.navigate", e)
       )
     }
@@ -60,7 +61,7 @@ export function Favorites() {
           </p>
         ) : (
           favorites.map((path) => {
-            const parts = path.split(/[/\\]/).filter(Boolean)
+            const parts = splitPath(path)
             const name = parts.at(-1) ?? path
             const parent = parts.at(-2)
             return (

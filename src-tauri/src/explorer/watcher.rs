@@ -39,7 +39,9 @@ impl FsWatcher {
             Config::default().with_poll_interval(Duration::from_millis(100)),
         )?;
 
-        watcher.watch(Path::new(&path_clone), RecursiveMode::Recursive)?;
+        // The explorer only lists one directory level. A recursive watch on `/`, `~` or `C:\`
+        // would exhaust inotify watches (Linux) and burn RAM/CPU on every platform.
+        watcher.watch(Path::new(&path_clone), RecursiveMode::NonRecursive)?;
         self.watchers.insert(path, watcher);
         Ok(())
     }

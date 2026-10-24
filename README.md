@@ -2,7 +2,7 @@
 
 # PSExplorer
 
-**A modern terminal for Windows, built with Tauri 2 + React + Rust**
+**A modern terminal for Windows, macOS and Linux, built with Tauri 2 + React + Rust**
 
 [![Built with Tauri](https://img.shields.io/badge/Built%20with-Tauri%202-24C8D8?style=flat-square&logo=tauri)](https://tauri.app)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react)](https://react.dev)
@@ -25,7 +25,7 @@ No emulation. No compromise. Full ConPTY with ANSI/VT100 support.
 ## Features
 
 ### Terminal
-- **Native PTY** — Real PowerShell, CMD, Git Bash, WSL processes via ConPTY
+- **Native PTY** — Real PowerShell, CMD, Git Bash, WSL (ConPTY on Windows); bash, zsh, fish and any shell in `/etc/shells` on macOS and Linux
 - **Multi-tab** — Open unlimited terminals, each with its own shell, CWD, and history
 - **Vertical tab bar** — Tabs on the left panel with folder name display
 - **Tab management** — Pin to top, rename, drag to reorder, right-click context menu

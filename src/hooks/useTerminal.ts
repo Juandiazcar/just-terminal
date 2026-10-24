@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react"
 import type { FitAddon } from "@xterm/addon-fit"
 import type { Terminal } from "@xterm/xterm"
-import { createXterm } from "@/lib/xterm-setup"
+import { createXterm, enableGpuRenderer } from "@/lib/xterm-setup"
 import {
   onPtyOutput,
   onTerminalClosed,
@@ -11,6 +11,7 @@ import {
   createTerminal,
 } from "@/lib/tauri-bridge"
 import { extractCwdFromOsc7 } from "@/lib/osc-parser"
+import { hasPrimaryModifier } from "@/lib/platform"
 import { useTerminalsStore } from "@/store/terminals.store"
 import { useExplorerStore } from "@/store/explorer.store"
 import { useSessionStore } from "@/store/session.store"
@@ -29,7 +30,7 @@ export function useTerminal(
   const ptyIdRef = useRef<string>(terminalId)
   const unlistenRefs = useRef<Array<() => void>>([])
 
-  const { updateCwd, sessions } = useTerminalsStore()
+  const updateCwd = useTerminalsStore((s) => s.updateCwd)
   const setCwd = useExplorerStore((s) => s.setCwd)
   const sessionPushRecent = useSessionStore((s) => s.pushRecentDir)
   const isDark = useSessionStore((s) => s.theme === "dark")
@@ -56,15 +57,18 @@ export function useTerminal(
     const rafId = requestAnimationFrame(() => {
       if (!containerRef.current) return
       term.open(containerRef.current)
+      enableGpuRenderer(term)
       fitAddon.fit()
 
       term.attachCustomKeyEventHandler((e) => {
         if (e.type !== "keydown") return true
-        if (e.ctrlKey && !e.shiftKey && e.key === "c" && term.hasSelection()) {
+        // Cmd+C/V on macOS, Ctrl+C/V (and Ctrl+Shift+C/V) elsewhere
+        const key = e.key.toLowerCase()
+        if (hasPrimaryModifier(e) && key === "c" && term.hasSelection()) {
           navigator.clipboard.writeText(term.getSelection()).catch(() => {})
           return false
         }
-        if (e.ctrlKey && !e.shiftKey && e.key === "v") {
+        if (hasPrimaryModifier(e) && key === "v") {
           navigator.clipboard
             .readText()
             .then((text) => {
@@ -87,7 +91,8 @@ export function useTerminal(
     const setupListeners = async () => {
       const unlistenOutput = await onPtyOutput(terminalId, (data) => {
         const cwd = extractCwdFromOsc7(data)
-        if (cwd) {
+        // Every prompt emits OSC 7; only react when the directory actually changed
+        if (cwd && cwd !== useTerminalsStore.getState().sessions[terminalId]?.cwd) {
           updateCwd(terminalId, cwd)
           setCwd(cwd).catch(() => {})
           sessionPushRecent(cwd)
@@ -101,7 +106,7 @@ export function useTerminal(
         )
         const disposable = term.onData(() => {
           disposable.dispose()
-          const cwd = sessions[terminalId]?.cwd ?? initialCwd
+          const cwd = useTerminalsStore.getState().sessions[terminalId]?.cwd ?? initialCwd
           createTerminal(shell.executable, shell.args ?? [], cwd)
             .then((newId) => {
               ptyIdRef.current = newId
